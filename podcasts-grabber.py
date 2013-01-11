@@ -21,7 +21,10 @@ import os
 import sys
 import re
 from urllib.parse import urlparse
+from urllib.request import urlretrieve
 from shutil import rmtree
+from multiprocessing import Pool
+from random import shuffle
 
 import feedparser
 
@@ -34,7 +37,7 @@ except ImportError:
 
 CONFIG_DIR = os.path.join(CONFIG_DIR, "podcasts-grabber")
 
-MAX_CONCURRENT_DOWNLOADS = 2
+MAX_CONCURRENT_DOWNLOADS = 10
 
 def load_configuration():
     """ Read list of feeds and already downloaded episodes
@@ -53,7 +56,8 @@ def load_configuration():
     episodes_filename = os.path.join(CONFIG_DIR, "episodes.txt")
     if os.path.exists(episodes_filename):
         episodes = set([episode.strip() for episode in 
-                            open(episodes_filename, "r").readlines()])
+                            open(episodes_filename, "r").readlines()
+                            if episode.strip() != ""])
     else:
         episodes = set()
 
@@ -90,7 +94,13 @@ def process_feed(url, already_downloaded):
         print("{}: NO NEW EPISODES\n{}\n".format(title, url))
         return None
 
-def download_episodes(feeds, old_episodes):
+def download_file(params):
+    """ Download a file into specific folder """
+    url, folder = params
+    name = os.path.join(folder, url[url.rfind('/') + 1:])
+    urlretrieve(url, filename=name)
+
+def download_episodes(feeds):
     """ Download episodes """
     podcasts_dir = os.path.expanduser("~/podcasts")
     if os.path.exists(podcasts_dir):
@@ -107,6 +117,7 @@ def download_episodes(feeds, old_episodes):
     os.chdir(podcasts_dir)
 
     jobs = []
+    old_episodes = []
 
     # create folders and prepare list of urls
     for feed in feeds:
@@ -119,14 +130,25 @@ def download_episodes(feeds, old_episodes):
             pass
         
         for link in feed['links']:
-            old_episodes.add(link)
+            old_episodes.append(link)
             jobs.append((link, feed['title']))
 
-    # download files
+    # Shuffle jobs to prevent downloading many files from same server in the same time
+    shuffle(jobs)
+
+    # Download files with progressbar
+    pool = Pool(processes=4)
+    result = pool.imap(download_file, jobs, 1)
+    len_jobs = len(jobs)
+    print("0 / {}".format(len_jobs))
+    pos = 0
+    for _ in result :
+        pos += 1
+        print("\r{} / {}".format(pos, len_jobs))
 
     # save old episodes
     episodes_filename = os.path.join(CONFIG_DIR, "episodes.txt")
-    open(episodes_filename, 'w').write('\n'.join(old_episodes))
+    open(episodes_filename, 'a').write("\n{}\n".format('\n'.join(old_episodes)))
 
 
 if __name__ == "__main__":
@@ -145,6 +167,6 @@ if __name__ == "__main__":
     if answer.lower() in ["n", "no"]:
         sys.exit(0)
 
-    download_episodes(download_list, episodes)
+    download_episodes(download_list)
 
 # vim: tabstop=4 expandtab shiftwidth=4 softtabstop=4
