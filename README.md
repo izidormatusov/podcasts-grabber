@@ -3,7 +3,7 @@ podcasts-grabber
 
 Command line script to download podcasts
 
-Configuration is placed `in ~/.config/podcasts-grabber/feeds.conf`:
+Configuration is placed in `~/.config/podcasts-grabber/feeds.conf`:
 
     # English
     http://feeds.feedburner.com/freakonomicsradio
